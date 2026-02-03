@@ -1,0 +1,6 @@
+The compute shader writes positions
+The vertex shader reads those same positions
+The fragment shader outputs these positions
+
+Vertex shader = “particle → sprite”
+Fragment shader = “sprite → pixels”
