@@ -15,14 +15,14 @@ import moderngl
 # ----------------------------
 # Configurations
 # ----------------------------
-N_PER_TYPE = 1000
+N_PER_TYPE = 5000
 DT = 1.0 / 60.0     # How much time passes per frame
-SOFTENING = 0.06    # Prevents divide by zero
-DRAG = 0.98         # Lower is more dampening
+SOFTENING = 0.10    # Prevents divide by zero
+DRAG = 0.91         # Lower is more dampening
 MAX_SPEED = 1.5
 
-SAME_REPEL = 0.7
-OTHER_ATTRACT = 0.7
+SAME_REPEL = 1
+OTHER_ATTRACT = 1
 FORCE_FALLOFF = 1.0
 WORLD_BOUNDS = 1.0
 
@@ -184,6 +184,7 @@ def main():
 
     ctx = moderngl.create_context()
     ctx.enable(moderngl.BLEND)
+    ctx.enable(moderngl.PROGRAM_POINT_SIZE)
 
     # Build initial particles on CPU (only once)
     N = 2 * N_PER_TYPE
@@ -229,7 +230,7 @@ def main():
     compute["uForceFalloff"].value = FORCE_FALLOFF
     compute["uBounds"].value = WORLD_BOUNDS
 
-    prog["uPointSize"].value = 12.0
+    prog["uPointSize"].value = 1.0
 
     while not glfw.window_should_close(window):
         glfw.poll_events()

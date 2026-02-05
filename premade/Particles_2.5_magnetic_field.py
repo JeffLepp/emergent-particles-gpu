@@ -21,16 +21,16 @@ import moderngl
 # ----------------------------
 # Configurations
 # ----------------------------
-N_PER_TYPE = 5000
+N_PER_TYPE = 7000
 DT = 1.0 / 60.0     # How much time passes per frame
-SOFTENING = 0.015    # Prevents divide by zero
-DRAG = 0.98         # Lower is more dampening
-MAX_SPEED = 1
+SOFTENING = 0.05    # Prevents divide by zero
+DRAG = 0.99         # Lower is more dampening
+MAX_SPEED = 1.5
 
 SAME_REPEL = 1
-OTHER_ATTRACT = 1.001
-FORCE_FALLOFF = .6
-WORLD_BOUNDS = 1
+OTHER_ATTRACT = 1.003
+FORCE_FALLOFF = .85
+WORLD_BOUNDS = 1.0
 
 # ----------------------------
 # GLSL: Compute shader (OpenGL 4.3)
@@ -38,6 +38,7 @@ WORLD_BOUNDS = 1
 COMPUTE_SRC = r"""
 #version 430
 
+// Define the struct OUTSIDE the SSBO block (driver-friendly)
 struct Particle {
     vec2 pos;
     vec2 vel;
@@ -60,10 +61,8 @@ uniform float uOtherAttract;
 uniform float uForceFalloff;
 uniform float uBounds;
 
-// Each group has 256 threads -> 1 thread per particle
 layout(local_size_x = 256) in;
 
-// Enforce speed limit
 vec2 clampSpeed(vec2 v, float maxS) {
     float s2 = dot(v, v);
     float m2 = maxS * maxS;
@@ -75,40 +74,29 @@ vec2 clampSpeed(vec2 v, float maxS) {
 }
 
 void main() {
-
-    // Each threat has ID corelating to which particle (ie. thread 1 -> particle 1)
     uint i = gl_GlobalInvocationID.x;
     if (i >= uint(uN)) return;
 
-    // Local variables faster than global GPU mem
     vec2 pos_i = p[i].pos;
     vec2 vel_i = p[i].vel;
     int  t_i   = p[i].type;
 
     vec2 acc = vec2(0.0);
 
-    // O(N^2) forces 
+    // O(N^2) forces
     for (int j = 0; j < uN; j++) {
         if (j == int(i)) continue;
 
-        // displacement d (dx, dy)
         vec2 d = p[j].pos - pos_i;
-        
-        // dx²+dy² = distance², uSoft prevents r = 0
         float r2 = dot(d, d) + uSoft;
-
-        // Normalize direction
         float invr = inversesqrt(r2);
         vec2 dir = d * invr;
 
-        // Compute force falloff
         float base = 1.0 / r2;
         float mag  = pow(base, uForceFalloff);
 
         int t_j = p[j].type;
 
-        // Displacement Logic from types
-        // +dir = pull towards, -dir = push away
         if (t_j == t_i) {
             // same type repels
             acc -= dir * (uSameRepel * mag);
@@ -118,19 +106,17 @@ void main() {
         }
     }
 
-    // Basic physics 
     vel_i += acc * uDT;
     vel_i *= uDrag;
     vel_i = clampSpeed(vel_i, uMaxSpeed);
     pos_i += vel_i * uDT;
 
-    // Bounce boundaries
+    // bounce bounds
     if (pos_i.x < -uBounds) { pos_i.x = -uBounds; vel_i.x *= -0.9; }
     if (pos_i.x >  uBounds) { pos_i.x =  uBounds; vel_i.x *= -0.9; }
     if (pos_i.y < -uBounds) { pos_i.y = -uBounds; vel_i.y *= -0.9; }
     if (pos_i.y >  uBounds) { pos_i.y =  uBounds; vel_i.y *= -0.9; }
 
-    // Write results back to GPU buffer
     p[i].pos = pos_i;
     p[i].vel = vel_i;
 }
@@ -204,6 +190,7 @@ def main():
 
     ctx = moderngl.create_context()
     ctx.enable(moderngl.BLEND)
+    ctx.enable(moderngl.PROGRAM_POINT_SIZE)
 
     # Build initial particles on CPU (only once)
     N = 2 * N_PER_TYPE
@@ -249,7 +236,7 @@ def main():
     compute["uForceFalloff"].value = FORCE_FALLOFF
     compute["uBounds"].value = WORLD_BOUNDS
 
-    prog["uPointSize"].value = 12.0
+    prog["uPointSize"].value = 1.0
 
     while not glfw.window_should_close(window):
         glfw.poll_events()

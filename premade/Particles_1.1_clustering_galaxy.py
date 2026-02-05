@@ -7,12 +7,6 @@ Two types: A(0) and B(1)
 
 Physics runs on GPU (compute shader).
 """
-
-# TODO: I want Particle struct to contain a weight
-#       From this we can dynamically allocate configs
-
-#       Mouse interaction (L: grav R: repl)
-
 # Handled by the CPU
 import numpy as np
 import glfw
@@ -21,15 +15,15 @@ import moderngl
 # ----------------------------
 # Configurations
 # ----------------------------
-N_PER_TYPE = 5000
+N_PER_TYPE = 1000
 DT = 1.0 / 60.0     # How much time passes per frame
-SOFTENING = 0.10    # Prevents divide by zero
-DRAG = 0.99         # Lower is more dampening
+SOFTENING = 0.03    # Prevents divide by zero
+DRAG = 0.98         # Lower is more dampening
 MAX_SPEED = 1.5
 
-SAME_REPEL = 1
-OTHER_ATTRACT = 1.002
-FORCE_FALLOFF = .85
+SAME_REPEL = 0.7
+OTHER_ATTRACT = 0.7
+FORCE_FALLOFF = 1.0
 WORLD_BOUNDS = 1.0
 
 # ----------------------------
@@ -83,7 +77,7 @@ void main() {
 
     vec2 acc = vec2(0.0);
 
-    // O(N^2) forces
+    // O(N^2) forces (fine for small N; learning demo)
     for (int j = 0; j < uN; j++) {
         if (j == int(i)) continue;
 
@@ -190,6 +184,7 @@ def main():
 
     ctx = moderngl.create_context()
     ctx.enable(moderngl.BLEND)
+    ctx.enable(moderngl.PROGRAM_POINT_SIZE)
 
     # Build initial particles on CPU (only once)
     N = 2 * N_PER_TYPE
@@ -235,7 +230,7 @@ def main():
     compute["uForceFalloff"].value = FORCE_FALLOFF
     compute["uBounds"].value = WORLD_BOUNDS
 
-    prog["uPointSize"].value = 12.0
+    prog["uPointSize"].value = 1.8
 
     while not glfw.window_should_close(window):
         glfw.poll_events()

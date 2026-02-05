@@ -28,7 +28,7 @@ MAX_SPEED = 0.8
 SAME_REPEL = 1.01
 OTHER_ATTRACT = 1.51
 FORCE_FALLOFF = 0.5
-WORLD_BOUNDS = .95
+WORLD_BOUNDS = 1
 
 # Neighbor grid params
 GRID_RES = 256                 # grid is GRID_RES x GRID_RES
@@ -362,6 +362,7 @@ def main():
 
     ctx = moderngl.create_context()
     ctx.enable(moderngl.BLEND)
+    ctx.enable(moderngl.PROGRAM_POINT_SIZE)
 
     # Particle init (CPU once)
     N = 2 * N_PER_TYPE
@@ -444,7 +445,7 @@ def main():
     cs_physics["uMaxNeighbors"].value = MAX_NEIGHBORS
 
     # Render uniforms
-    prog["uPointSize"].value = 12.0
+    prog["uPointSize"].value = 1.0
 
     def dispatch(shader, count):
         groups_x = (count + 256 - 1) // 256

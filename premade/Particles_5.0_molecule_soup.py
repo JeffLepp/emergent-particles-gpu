@@ -19,14 +19,14 @@ import moderngl
 # ----------------------------
 # Configurations
 # ----------------------------
-N_PER_TYPE = 3000
+N_PER_TYPE = 15000
 DT = 1.0 / 60.0
 SOFTENING = 0.03
-DRAG = 0.98
+DRAG = 0.99
 MAX_SPEED = 0.8
 
-SAME_REPEL = 1.001
-OTHER_ATTRACT = 1.00
+SAME_REPEL = 1.01
+OTHER_ATTRACT = 1.001
 FORCE_FALLOFF = 0.6
 WORLD_BOUNDS = 1.0
 
@@ -272,6 +272,69 @@ void main() {
 }
 """
 
+def assign_initial_velocities(
+    particles,
+    mode="random",
+    speed=0.15,
+    swirl_center=(0.0, 0.0),
+    radial_bias=1.0,
+    seed=42,
+):
+    """
+    Assign initial velocities to particles (CPU-side, one-time).
+
+    Parameters
+    ----------
+    particles : structured numpy array
+        Must have fields ["pos", "vel", "type"]
+    mode : str
+        "random"  -> isotropic random velocities
+        "radial"  -> outward/inward from center
+        "swirl"   -> tangential swirl around center
+        "split"   -> opposite flow per type (A vs B)
+    speed : float
+        Base velocity magnitude
+    swirl_center : tuple(float, float)
+        Center used for radial / swirl modes
+    radial_bias : float
+        +1 = outward, -1 = inward (radial mode)
+    seed : int
+        RNG seed for reproducibility
+    """
+    rng = np.random.default_rng(seed)
+
+    pos = particles["pos"]
+    vel = particles["vel"]
+    typ = particles["type"]
+
+    if mode == "random":
+        angles = rng.uniform(0, 2 * np.pi, len(particles))
+        vel[:, 0] = np.cos(angles) * speed
+        vel[:, 1] = np.sin(angles) * speed
+
+    elif mode == "radial":
+        center = np.array(swirl_center, dtype=np.float32)
+        d = pos - center
+        norm = np.linalg.norm(d, axis=1, keepdims=True) + 1e-6
+        vel[:] = radial_bias * speed * d / norm
+
+    elif mode == "swirl":
+        center = np.array(swirl_center, dtype=np.float32)
+        d = pos - center
+        norm = np.linalg.norm(d, axis=1, keepdims=True) + 1e-6
+        tangent = np.stack([-d[:, 1], d[:, 0]], axis=1)
+        vel[:] = speed * tangent / norm
+
+    elif mode == "split":
+        angles = rng.uniform(0, 2 * np.pi, len(particles))
+        base = np.stack([np.cos(angles), np.sin(angles)], axis=1)
+        vel[:] = speed * base
+        vel[typ == 1] *= -1.0  # B flows opposite of A
+
+    else:
+        raise ValueError(f"Unknown velocity mode: {mode}")
+
+
 def main():
     if not glfw.init():
         raise RuntimeError("glfw.init() failed")
@@ -290,6 +353,7 @@ def main():
 
     ctx = moderngl.create_context()
     ctx.enable(moderngl.BLEND)
+    ctx.enable(moderngl.PROGRAM_POINT_SIZE)
 
     # Particle init (CPU once)
     N = 2 * N_PER_TYPE
@@ -315,6 +379,14 @@ def main():
         particles["pos"][i]  = np.array([+0.0, 0.0], np.float32) + rng.uniform(-0.3, 0.3, 2).astype(np.float32)
         particles["vel"][i]  = rng.uniform(-0.1, 0.1, 2).astype(np.float32)
         particles["type"][i] = 1
+
+    assign_initial_velocities(
+        particles,
+        mode="swirl",      # try: "random", "radial", "swirl", "split"
+        speed=0.25,
+        swirl_center=(0.0, 0.0),
+        seed=42,
+    )
 
     # SSBO: particles (binding=0)
     ssbo_particles = ctx.buffer(particles.tobytes())
@@ -361,7 +433,7 @@ def main():
     cs_physics["uMaxNeighbors"].value = MAX_NEIGHBORS
 
     # Render uniforms
-    prog["uPointSize"].value = 12.0
+    prog["uPointSize"].value = 1.0
 
     def dispatch(shader, count):
         groups_x = (count + 256 - 1) // 256

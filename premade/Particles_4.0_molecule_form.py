@@ -19,7 +19,7 @@ import moderngl
 # ----------------------------
 # Configurations
 # ----------------------------
-N_PER_TYPE = 8000
+N_PER_TYPE = 3000
 DT = 1.0 / 60.0
 SOFTENING = 0.03
 DRAG = 0.98
@@ -32,7 +32,7 @@ WORLD_BOUNDS = 1.0
 
 # Neighbor grid params
 GRID_RES = 256                 # grid is GRID_RES x GRID_RES
-NEIGHBOR_RADIUS = 0.18         # world units (tune this)
+NEIGHBOR_RADIUS = 0.175         # world units (tune this)
 MAX_NEIGHBORS = 256            # safety cap per particle (prevents worst-case blowups)
 
 # ----------------------------
@@ -290,6 +290,7 @@ def main():
 
     ctx = moderngl.create_context()
     ctx.enable(moderngl.BLEND)
+    ctx.enable(moderngl.PROGRAM_POINT_SIZE)
 
     # Particle init (CPU once)
     N = 2 * N_PER_TYPE
@@ -306,13 +307,13 @@ def main():
 
     # A on left
     for i in range(N_PER_TYPE):
-        particles["pos"][i]  = np.array([-0.5, 0.0], np.float32) + rng.uniform(-0.3, 0.3, 2).astype(np.float32)
+        particles["pos"][i]  = np.array([0.0, 0.0], np.float32) + rng.uniform(-0.3, 0.3, 2).astype(np.float32)
         particles["vel"][i]  = rng.uniform(-0.1, 0.1, 2).astype(np.float32)
         particles["type"][i] = 0
 
     # B on right
     for i in range(N_PER_TYPE, N):
-        particles["pos"][i]  = np.array([+0.5, 0.0], np.float32) + rng.uniform(-0.3, 0.3, 2).astype(np.float32)
+        particles["pos"][i]  = np.array([0.0, 0.0], np.float32) + rng.uniform(-0.3, 0.3, 2).astype(np.float32)
         particles["vel"][i]  = rng.uniform(-0.1, 0.1, 2).astype(np.float32)
         particles["type"][i] = 1
 
@@ -361,7 +362,7 @@ def main():
     cs_physics["uMaxNeighbors"].value = MAX_NEIGHBORS
 
     # Render uniforms
-    prog["uPointSize"].value = 12.0
+    prog["uPointSize"].value = 1.0
 
     def dispatch(shader, count):
         groups_x = (count + 256 - 1) // 256

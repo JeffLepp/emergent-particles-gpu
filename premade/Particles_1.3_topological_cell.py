@@ -7,29 +7,24 @@ Two types: A(0) and B(1)
 
 Physics runs on GPU (compute shader).
 """
-
-# TODO: I want Particle struct to contain a weight
-#       From this we can dynamically allocate configs
-
-#       Mouse interaction (L: grav R: repl)
-
 # Handled by the CPU
 import numpy as np
 import glfw
 import moderngl
+import time
 
 # ----------------------------
 # Configurations
 # ----------------------------
-N_PER_TYPE = 7000
+N_PER_TYPE = 5000
 DT = 1.0 / 60.0     # How much time passes per frame
-SOFTENING = 0.05    # Prevents divide by zero
-DRAG = 0.99         # Lower is more dampening
+SOFTENING = 0.10    # Prevents divide by zero
+DRAG = 0.95         # Lower is more dampening
 MAX_SPEED = 1.5
 
-SAME_REPEL = 1
-OTHER_ATTRACT = 1.003
-FORCE_FALLOFF = .85
+SAME_REPEL = 0.6999
+OTHER_ATTRACT = 0.7
+FORCE_FALLOFF = 1.0
 WORLD_BOUNDS = 1.0
 
 # ----------------------------
@@ -83,7 +78,7 @@ void main() {
 
     vec2 acc = vec2(0.0);
 
-    // O(N^2) forces
+    // O(N^2) forces (fine for small N; learning demo)
     for (int j = 0; j < uN; j++) {
         if (j == int(i)) continue;
 
@@ -190,6 +185,12 @@ def main():
 
     ctx = moderngl.create_context()
     ctx.enable(moderngl.BLEND)
+    ctx.enable(moderngl.PROGRAM_POINT_SIZE)
+
+    query = ctx.query(time=True)  # GPU timer query (nanoseconds)
+    ema_compute_ms = None
+    ema_frame_ms = None
+    last_print = time.perf_counter()
 
     # Build initial particles on CPU (only once)
     N = 2 * N_PER_TYPE
@@ -235,20 +236,22 @@ def main():
     compute["uForceFalloff"].value = FORCE_FALLOFF
     compute["uBounds"].value = WORLD_BOUNDS
 
-    prog["uPointSize"].value = 12.0
+    prog["uPointSize"].value = 1.0
 
     while not glfw.window_should_close(window):
         glfw.poll_events()
-
         if glfw.get_key(window, glfw.KEY_ESCAPE) == glfw.PRESS:
             break
+
+        frame_t0 = time.perf_counter()
 
         fb_w, fb_h = glfw.get_framebuffer_size(window)
         ctx.viewport = (0, 0, fb_w, fb_h)
 
-        # run compute
+        # --- GPU compute timing (real GPU time via timer query) ---
         groups_x = (N + 256 - 1) // 256
-        compute.run(group_x=groups_x)
+        with query:
+            compute.run(group_x=groups_x)
 
         # ensure compute writes visible to rendering
         ctx.memory_barrier()
@@ -256,8 +259,31 @@ def main():
         # render
         ctx.clear(0.03, 0.03, 0.04, 1.0)
         vao.render(mode=moderngl.POINTS, vertices=N)
-
         glfw.swap_buffers(window)
+
+        # timings
+        compute_ms = query.elapsed / 1e6  # ns -> ms
+        frame_ms = (time.perf_counter() - frame_t0) * 1000.0
+
+        # EMA smoothing
+        if ema_compute_ms is None:
+            ema_compute_ms = compute_ms
+            ema_frame_ms = frame_ms
+        else:
+            ema_compute_ms = 0.9 * ema_compute_ms + 0.1 * compute_ms
+            ema_frame_ms = 0.9 * ema_frame_ms + 0.1 * frame_ms
+
+        # print ~1 Hz
+        now = time.perf_counter()
+        if now - last_print > 1.0:
+            fps = 1000.0 / max(1e-6, ema_frame_ms)
+            print(
+                f"GPU compute: ~{ema_compute_ms:.3f} ms | "
+                f"frame: ~{ema_frame_ms:.3f} ms (~{fps:.1f} FPS) | N={N:,}",
+                flush=True
+            )
+            last_print = now
+
 
     glfw.terminate()
 
