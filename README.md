@@ -6,7 +6,7 @@ Real-time GPU particle simulation built with **ModernGL + GLFW** where all physi
 ![Emergent particle behavior](assets/Particles_molecule.png)
 
 ## Uniform grid structure
-![Uniform grid neighbor search](assets/Particles_cell.png)
+![Uniform grid neighbor search](assets/Particles_cell_gif.gif)
 
 
 ## Install

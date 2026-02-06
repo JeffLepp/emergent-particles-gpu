@@ -250,7 +250,7 @@ def main():
     compute["uForceFalloff"].value = FORCE_FALLOFF
     compute["uBounds"].value = WORLD_BOUNDS
 
-    prog["uPointSize"].value = 1.0
+    prog["uPointSize"].value = 1.5
 
     while not glfw.window_should_close(window):
         glfw.poll_events()
