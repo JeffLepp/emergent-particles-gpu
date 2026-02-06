@@ -1,0 +1,10 @@
+{
+  "start_n": 20,
+  "end_n": 400,
+  "step_n": 10,
+  "warmup_seconds": 1.0,
+  "sample_seconds": 2.0,
+  "cap_fps": 0,
+  "seed": 1,
+  "out_csv": "results.csv"
+}

@@ -13,7 +13,9 @@ Keys:
 - ESC = quit
 - SPACE = add 100 particles (random, no reset)
 """
-
+import argparse
+import json
+import csv
 import time
 import numpy as np
 import glfw
@@ -41,6 +43,33 @@ POINT_SIZE = 1.8
 CELL_SIZE = 0.08         # bigger = more neighbors, slower, more like long-range
 NEIGHBOR_RADIUS = 0.16   # only interact within this distance
 MAX_NEIGHBORS_PER_PARTICLE = 256  # cap work per particle
+
+# ----------------------------
+# Benchmarking utilities (for --bench mode)
+# ----------------------------
+def load_bench_config(path: str):
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def parse_args():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--bench", action="store_true", help="Run automated sweep benchmark and exit")
+    ap.add_argument("--config", default="bench_config.json", help="Path to benchmark config json")
+    return ap.parse_args()
+
+def bench_append_particles(particles, k, rng, particle_dtype, WORLD_BOUNDS):
+    new = np.zeros(k, dtype=particle_dtype)
+    new["pos"] = rng.uniform(-WORLD_BOUNDS, WORLD_BOUNDS, (k, 2)).astype(np.float32)
+    new["vel"] = rng.uniform(-0.1, 0.1, (k, 2)).astype(np.float32)
+    new["type"] = rng.integers(0, 2, size=k, dtype=np.int32)
+    new["pad0"] = 0
+    return np.concatenate([particles, new], axis=0)
+
+def bench_write_csv(path, rows):
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=["engine", "N", "avg_ms", "fps"])
+        w.writeheader()
+        w.writerows(rows)
 
 # ----------------------------
 # GLSL: Vertex + Fragment (draw from SSBO)
@@ -262,8 +291,13 @@ def cpu_step_grid(x, y, vx, vy, t, dt, soft, drag, max_speed,
 
 
 def main():
+
     if not glfw.init():
         raise RuntimeError("glfw.init() failed")
+    
+    args = parse_args()
+    bench = args.bench
+    cfg = load_bench_config(args.config) if bench else None
 
     glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 4)
     glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 3)
@@ -275,7 +309,7 @@ def main():
         raise RuntimeError("glfw.create_window() failed")
 
     glfw.make_context_current(window)
-    glfw.swap_interval(1)
+    glfw.swap_interval(0)   # Unbound/bound FPS here -> unbounded for benchmark best to keep on
 
     ctx = moderngl.create_context()
     ctx.enable(moderngl.BLEND)
@@ -292,7 +326,8 @@ def main():
     ])
 
     particles = np.zeros(N, dtype=particle_dtype)
-    rng = np.random.default_rng(1)
+    rng = np.random.default_rng(cfg["seed"] if bench else 1)
+
 
     # Type A on left
     particles["pos"][:N_PER_TYPE] = (np.array([-0.5, 0.0], np.float32)
@@ -326,6 +361,112 @@ def main():
     last_print = time.perf_counter()
 
     space_was_down = False
+    
+    if bench:
+        # Re-init particle count to exactly start_n (total particles)
+        start_n = int(cfg["start_n"])
+        end_n   = int(cfg["end_n"])
+        step_n  = int(cfg["step_n"])
+        warm_s  = float(cfg["warmup_seconds"])
+        samp_s  = float(cfg["sample_seconds"])
+        out_csv = str(cfg.get("out_csv", "cpu_moderngl.csv"))
+
+        # Force initial N to match start_n
+        # (your current init creates N = 2*N_PER_TYPE)
+        if N != start_n:
+            if N > start_n:
+                particles = particles[:start_n].copy()
+            else:
+                particles = particles.copy()
+                particles = bench_append_particles(particles, start_n - N, rng, particle_dtype, WORLD_BOUNDS)
+
+            x = particles["pos"][:, 0]
+            y = particles["pos"][:, 1]
+            vx = particles["vel"][:, 0]
+            vy = particles["vel"][:, 1]
+            t = particles["type"]
+            N = particles.shape[0]
+
+            # rebuild SSBO to exact size
+            ssbo.release()
+            ssbo = ctx.buffer(particles.tobytes())
+            ssbo.bind_to_storage_buffer(binding=0)
+
+        rows = []
+        target = start_n
+
+        def one_frame():
+            nonlocal ssbo, particles, N
+            t0 = time.perf_counter()
+
+            cpu_step_grid(
+                x, y, vx, vy, t,
+                DT, SOFTENING, DRAG, MAX_SPEED,
+                SAME_REPEL, OTHER_ATTRACT, FORCE_FALLOFF,
+                CELL_SIZE, NEIGHBOR_RADIUS, MAX_NEIGHBORS_PER_PARTICLE,
+            )
+
+            # upload
+            if ssbo.size != particles.nbytes:
+                ssbo.release()
+                ssbo = ctx.buffer(particles.tobytes())
+                ssbo.bind_to_storage_buffer(binding=0)
+            else:
+                ssbo.write(particles.tobytes())
+
+            fb_w, fb_h = glfw.get_framebuffer_size(window)
+            ctx.viewport = (0, 0, fb_w, fb_h)
+            ctx.clear(0.03, 0.03, 0.04, 1.0)
+            vao.render(mode=moderngl.POINTS, vertices=N)
+            glfw.swap_buffers(window)
+
+            return (time.perf_counter() - t0) * 1000.0
+
+        while target <= end_n and (not glfw.window_should_close(window)):
+            # grow to target
+            if N < target:
+                particles = bench_append_particles(particles, target - N, rng, particle_dtype, WORLD_BOUNDS)
+
+                x = particles["pos"][:, 0]
+                y = particles["pos"][:, 1]
+                vx = particles["vel"][:, 0]
+                vy = particles["vel"][:, 1]
+                t = particles["type"]
+                N = particles.shape[0]
+
+            # warmup
+            warm_t0 = time.perf_counter()
+            while time.perf_counter() - warm_t0 < warm_s:
+                glfw.poll_events()
+                if glfw.get_key(window, glfw.KEY_ESCAPE) == glfw.PRESS:
+                    glfw.set_window_should_close(window, True)
+                    break
+                one_frame()
+
+            # sample
+            ms_sum = 0.0
+            frames = 0
+            samp_t0 = time.perf_counter()
+            while time.perf_counter() - samp_t0 < samp_s:
+                glfw.poll_events()
+                if glfw.get_key(window, glfw.KEY_ESCAPE) == glfw.PRESS:
+                    glfw.set_window_should_close(window, True)
+                    break
+                ms_sum += one_frame()
+                frames += 1
+
+            if frames > 0:
+                avg_ms = ms_sum / frames
+                fps = 1000.0 / max(1e-9, avg_ms)
+                print(f"[BENCH][ModernGL CPU] N={N} avg={avg_ms:.3f} ms ({fps:.1f} FPS)")
+                rows.append({"engine": "moderngl_cpu", "N": N, "avg_ms": avg_ms, "fps": fps})
+
+            target += step_n
+
+        bench_write_csv(out_csv, rows)
+        glfw.terminate()
+        return
+
 
     while not glfw.window_should_close(window):
         glfw.poll_events()
