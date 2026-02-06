@@ -9,7 +9,7 @@ Real-time GPU particle simulation built with **ModernGL + GLFW** where all physi
 ![Uniform grid neighbor search](assets/Particles_cell.png)
 
 
-### Install
+## Install
 ```bash
 python -m venv .venv
 # Windows:
@@ -22,4 +22,10 @@ pip install -r requirements.txt
 
 To run, run any .py from src/ folder.
 
+## Benchmarking
 
+python Particles_Test_CPU.py --bench --config bench_config.json
+
+python Particles_in_pygame.py --bench --config bench_config.json
+
+python plot_bench.py --cpu cpu_moderngl.csv --pygame cpu_pygame.csv --out bench.png
