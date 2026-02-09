@@ -21,24 +21,24 @@ import time
 # ----------------------------
 # Configurations
 # ----------------------------
-N_PER_TYPE = 200000
-ADD_PER_SPACE = 10000
+N_PER_TYPE = 200
+ADD_PER_SPACE = 5000
 EXTRA_CAPACITY = 1000000
 DT = 1.0 / 90.0
-SOFTENING = 0.02
-DRAG = 1 #.98
-MAX_SPEED = 2 # .8
+SOFTENING = 0.03
+DRAG = 0.95 #.98
+MAX_SPEED = 1.5 # .8
 UPOINT_SIZE = 5.0
 
-SAME_REPEL = 1 # 1.001
+SAME_REPEL = 1.5 # 1.001
 OTHER_ATTRACT = 1 # 1.00
-FORCE_FALLOFF = 0 # .6
+FORCE_FALLOFF = .4 # .6
 WORLD_BOUNDS = 1.0
 
 # Neighbor grid params
 GRID_RES = 256                 # grid is GRID_RES x GRID_RES
 NEIGHBOR_RADIUS = 0.18         # world units (tune this)
-MAX_NEIGHBORS = 2056           # safety cap per particle # CHANGES HAHAHHA
+MAX_NEIGHBORS = 2056           # safety cap per particle 
 
 # ----------------------------
 # GLSL: Grid clear (set head[] = -1)
@@ -375,7 +375,7 @@ def main():
     cs_physics["uMaxNeighbors"].value = MAX_NEIGHBORS
 
     # Render uniforms
-    prog["uPointSize"].value = 6
+    prog["uPointSize"].value = 2
 
     # ----------------------------
     # Append helper (writes only new range)

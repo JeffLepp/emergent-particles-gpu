@@ -1,3 +1,45 @@
+GPU Particle Simulator — Technical Notes
+
+This project implements a 2D particle simulator where all physics is executed
+on the GPU using OpenGL compute shaders (GL 4.3+). The CPU is used only for
+initialization, buffer management, input handling, and dispatching compute
+work.
+
+Particle data is stored in Shader Storage Buffer Objects (SSBOs) containing:
+- position (vec2)
+- velocity (vec2)
+- particle type (int)
+
+To avoid O(N^2) all-pairs interaction costs, the simulator uses a uniform
+spatial grid built on the GPU each frame. Each particle is assigned to a grid
+cell, and interactions are limited to particles in nearby cells within a
+configurable neighbor radius.
+
+Simulation steps per frame:
+1. Clear grid cell heads (GPU)
+2. Build linked-cell lists via atomic operations (GPU)
+3. Compute forces using neighbor-limited traversal (GPU)
+4. Integrate velocity and position with damping and speed limits (GPU)
+5. Render particles as point sprites (GPU)
+
+Interaction model:
+- Same-type particles apply repulsive forces
+- Different-type particles apply attractive forces
+- Forces are distance-based with softening to avoid singularities
+
+The system is designed for scalability and visualization rather than physical
+accuracy. Parameters such as force strength, falloff, neighbor radius, and
+damping are intentionally simplified to encourage emergent behavior rather
+than real-world correctness.
+
+The recommended entry point is:
+- Particles_Test_GPU_Standard.py
+
+The premade/ directory contains alternative configurations that adjust
+interaction parameters and initial conditions to produce specific visual
+phenomena.
+
+Flow GPU:
 The compute shader writes positions
 The vertex shader reads those same positions
 The fragment shader outputs these positions

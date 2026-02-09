@@ -24,20 +24,20 @@ import moderngl
 # ----------------------------
 # Configurations
 # ----------------------------
-N_PER_TYPE = 10
-ADD_PER_SPACE = 10
+N_PER_TYPE = 200
+ADD_PER_SPACE = 25
 
-DT = 1.0 / 60.0
-SOFTENING = 0.10
-DRAG = 0.95
+DT = 1.0 / 90.0
+SOFTENING = 0.05
+DRAG = 1
 MAX_SPEED = 1.5
 
 SAME_REPEL = 0.6999
 OTHER_ATTRACT = 0.7
-FORCE_FALLOFF = 2.0
+FORCE_FALLOFF = 2
 WORLD_BOUNDS = 1.0
 
-POINT_SIZE = 1.8
+POINT_SIZE = 6
 
 # CPU neighbor grid params (tune these for speed/behavior)
 CELL_SIZE = 0.08         # bigger = more neighbors, slower, more like long-range
