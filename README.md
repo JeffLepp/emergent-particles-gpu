@@ -25,16 +25,22 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+## Where to Start
+Start with src/Particles_Test_GPU.py and press spacebar to add particles as you want. Particles added per spacebar press
+can be easily edited in config.json in the src/ path. Other factors such as forces, drag, and starting particles
+can be edited at the top of the respective .py file (ex. at the top of Particles_Test_GPU.py)
+
 assets/   → images, GIFs, benchmarks  
 
 docs/     → notes  
 
 premade/  → visual experiments with premade configurations
 
-src/      → CPU/GPU comparison & benchmarks  
-            Particles_Test_GPU will run the simulator physics via compute shader leading to great preformance
-            Particles_Test_CPU and Particles_in_pygame will run physics via the CPU and will preform poorly
-            Run plot_bench.py after doing benchmarking steps
+src/      → CPU/GPU sims (press spacebar to add particles while running)
+
+Particles_Test_GPU will run the simulator physics via compute shader leading to great preformance
+Particles_Test_CPU and Particles_in_pygame will run physics via the CPU and will preform poorly
+Run plot_bench.py after doing benchmarking steps (ensure to specify name or rename .csv after its made)
 
 ## Core Rules
 
