@@ -1,13 +1,9 @@
 """
 GPU Particles (ModernGL + GLFW) - Neighbor-limited via Uniform Grid
 -------------------------------------------------------------------
-Two types: A(0) and B(1)
-- Same type repels
-- Opposite type attracts
-
 All physics runs on GPU.
 
-Key upgrade vs O(N^2):
+Note for user, your program will run with the rules below (assuming you don't change the shader code, but feel free):
 - Builds a uniform grid each frame (GPU)
 - Each particle only interacts with nearby cells (GPU)
 """
@@ -17,28 +13,31 @@ import glfw
 import moderngl
 import time
 
+# ------------------------------------------------
+# Configurations (You can tune these as you want 
+#                   but its on a cool setting now)
+# ------------------------------------------------
 
-# ----------------------------
-# Configurations
-# ----------------------------
-N_PER_TYPE = 200000
-ADD_PER_SPACE = 10000
-EXTRA_CAPACITY = 1000000
-DT = 1.0 / 90.0
-SOFTENING = 0.02
-DRAG = 1 #.98
-MAX_SPEED = 2 # .8
-UPOINT_SIZE = 5.0
+N_PER_TYPE = 2000               # ie. 100 means 100 red and 100 blue particles at start
+ADD_PER_SPACE = 1000            # how many to add when space is pressed (up to EXTRA_CAPACITY)
+EXTRA_CAPACITY = 1000000        # pre-allocate this many particles max
 
-SAME_REPEL = 1 # 1.001
-OTHER_ATTRACT = 1 # 1.00
-FORCE_FALLOFF = 0 # .6
-WORLD_BOUNDS = 1.0
+SAME_REPEL = 1 # 1.001          # "strength" of same-type repulsion
+OTHER_ATTRACT = 1 # 1.00        # "strength" of dif-type attraction
+               
+SOFTENING = 0.02                # to avoid singularities at close range
+DRAG = 1 #.98                   # friction (1 = no drag, 0 = stop immediately)
+MAX_SPEED = 2 # .8              # cap on velocity 
+PARTICLE_SIZE = 1.0             # size of each particle
+
+FORCE_FALLOFF = 2 # .6          # 0 = inverse-square, 1 = inverse-linear, 2 = no falloff, etc.
+WORLD_BOUNDS = 1.0   
+DT = 1.0 / 90.0                                             
 
 # Neighbor grid params
-GRID_RES = 256                 # grid is GRID_RES x GRID_RES
-NEIGHBOR_RADIUS = 0.18         # world units (tune this)
-MAX_NEIGHBORS = 2056           # safety cap per particle # CHANGES HAHAHHA
+GRID_RES = 256                 # grid is GRID_RES x GRID_RES    
+NEIGHBOR_RADIUS = 0.18         # world units                    
+MAX_NEIGHBORS = 2056           # safety cap per particle        
 
 # ----------------------------
 # GLSL: Grid clear (set head[] = -1)
@@ -337,7 +336,7 @@ def main():
     ssbo_head = ctx.buffer(grid_head.tobytes())
     ssbo_head.bind_to_storage_buffer(binding=1)
 
-    # SSBO: next pointers (binding=2) — allocate full capacity (IMPORTANT)
+    # SSBO: next pointers (binding=2) — allocate full capacity
     next_idx_cpu = np.full(CAPACITY, -1, dtype=np.int32)
     ssbo_next = ctx.buffer(next_idx_cpu.tobytes())
     ssbo_next.bind_to_storage_buffer(binding=2)
@@ -375,7 +374,7 @@ def main():
     cs_physics["uMaxNeighbors"].value = MAX_NEIGHBORS
 
     # Render uniforms
-    prog["uPointSize"].value = 6
+    prog["uPointSize"].value = PARTICLE_SIZE
 
     # ----------------------------
     # Append helper (writes only new range)
@@ -396,7 +395,7 @@ def main():
         start = active_N
         end = active_N + k
 
-        # (optional) keep CPU shadow
+        # (optionl) keep CPU shadow
         particles_cpu[start:end] = new
 
         ssbo_particles.write(new.tobytes(), offset=start * stride)

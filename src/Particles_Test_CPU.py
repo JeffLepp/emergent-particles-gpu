@@ -1,13 +1,11 @@
 """
-CPU Two-Type Particles (NumPy + ModernGL + GLFW)
+CPU Two-Type Particles 
 ---------------------------------------------------------------
-Same visual + interaction rules as your GPU version, but physics is computed on CPU.
+Same visual + interaction rules as your GPU version in this same dir, but physics is computed on CPU.
 
 Notes:
-- A truly apples-to-apples CPU version of your O(N^2) compute shader is also O(N^2) here,
-  which becomes unusable above a few thousand particles.
-- This CPU version uses a **uniform grid neighbor search** (approximate, local interactions)
-  so it can still run at large N and give you meaningful performance comparisons.
+- NumPy + ModernGL + GLFW for rendering (still GPU-accelerated for drawing, but no GPU for compute physics and such)
+- This CPU version uses a **uniform grid neighbor search** like the CPU version you can find in /src
 
 Keys:
 - ESC = quit
@@ -22,7 +20,7 @@ import glfw
 import moderngl
 
 # ----------------------------
-# Configurations
+# Configurations look at GPU version to see comments of what these do (easier than diving in docs)
 # ----------------------------
 N_PER_TYPE = 200
 ADD_PER_SPACE = 25
@@ -37,7 +35,7 @@ OTHER_ATTRACT = 0.7
 FORCE_FALLOFF = 2
 WORLD_BOUNDS = 1.0
 
-POINT_SIZE = 6
+PARTICLE_SIZE = 6
 
 # CPU neighbor grid params (tune these for speed/behavior)
 CELL_SIZE = 0.08         # bigger = more neighbors, slower, more like long-range
@@ -354,7 +352,7 @@ def main():
 
     prog = ctx.program(vertex_shader=VERT_SRC, fragment_shader=FRAG_SRC)
     vao = ctx.vertex_array(prog, [])  # gl_VertexID reads from SSBO
-    prog["uPointSize"].value = POINT_SIZE
+    prog["uPointSize"].value = PARTICLE_SIZE
 
     # Simple perf stats
     ema_ms = None
@@ -372,7 +370,6 @@ def main():
         out_csv = str(cfg.get("out_csv", "cpu_moderngl.csv"))
 
         # Force initial N to match start_n
-        # (your current init creates N = 2*N_PER_TYPE)
         if N != start_n:
             if N > start_n:
                 particles = particles[:start_n].copy()

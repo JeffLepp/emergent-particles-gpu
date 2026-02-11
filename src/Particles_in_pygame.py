@@ -1,7 +1,7 @@
 """
 CPU Two-Type Particles (Pygame)
 --------------------------------
-Same general rules + look as your ModernGL version, but rendered with pygame.draw.circle.
+Same general rules + look as ModernGL version in the dir you're in now, but rendered with pygame.draw.circle.
 
 Keys:
 - ESC = quit
@@ -35,8 +35,7 @@ FORCE_FALLOFF = 2.0
 
 WORLD_BOUNDS = 1.0
 
-# "point sprite" feel
-POINT_SIZE = 2  # pixels radius-ish (pygame uses integer radius)
+PARTICLE_SIZE = 2  
 ALPHA_SOFT_EDGE = True  # set False for faster, hard circles
 
 # CPU neighbor grid params
@@ -44,7 +43,7 @@ CELL_SIZE = 0.08
 NEIGHBOR_RADIUS = 0.16
 MAX_NEIGHBORS_PER_PARTICLE = 256  # cap work per particle (None = no cap)
 
-# Colors (approx from your shader)
+# Colors
 COLOR_A = (255, 64, 64)
 COLOR_B = (64, 140, 255)
 BG = (8, 8, 10)
@@ -312,8 +311,8 @@ def main():
     accum_print = 0.0
 
     # prebuild sprite surfaces
-    sprite_a = soft_circle_surface(POINT_SIZE, COLOR_A) if ALPHA_SOFT_EDGE else None
-    sprite_b = soft_circle_surface(POINT_SIZE, COLOR_B) if ALPHA_SOFT_EDGE else None
+    sprite_a = soft_circle_surface(PARTICLE_SIZE, COLOR_A) if ALPHA_SOFT_EDGE else None
+    sprite_b = soft_circle_surface(PARTICLE_SIZE, COLOR_B) if ALPHA_SOFT_EDGE else None
 
     if bench:
         start_n = int(cfg["start_n"])
@@ -363,7 +362,7 @@ def main():
                 for i in range(x.shape[0]):
                     sx, sy = world_to_screen(x[i], y[i])
                     col = COLOR_A if t[i] == 0 else COLOR_B
-                    pygame.draw.circle(screen, col, (sx, sy), POINT_SIZE)
+                    pygame.draw.circle(screen, col, (sx, sy), PARTICLE_SIZE)
 
             pygame.display.flip()
             return (time.perf_counter() - t0) * 1000.0
@@ -427,8 +426,7 @@ def main():
 
 
     while running:
-        frame_dt = clock.tick(60) / 1000.0  # real time step (optional)
-        # keep your original "DT" behavior for consistency:
+        frame_dt = clock.tick(60) / 1000.0 
         dt = DT
 
         for event in pygame.event.get():
@@ -485,7 +483,7 @@ def main():
             for i in range(x.shape[0]):
                 sx, sy = world_to_screen(x[i], y[i])
                 col = COLOR_A if t[i] == 0 else COLOR_B
-                pygame.draw.circle(screen, col, (sx, sy), POINT_SIZE)
+                pygame.draw.circle(screen, col, (sx, sy), PARTICLE_SIZE)
 
         pygame.display.flip()
 
