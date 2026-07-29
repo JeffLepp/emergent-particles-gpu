@@ -1,39 +1,72 @@
+"""
+Plot the csvs written by the --bench modes.
+
+    python plot_bench.py --csv gpu_grid=gpu_grid.csv --csv cpu_pygame=cpu_pygame.csv --out bench.png
+
+Any csv with an "N" column plus the chosen --y column works, so this handles the
+GPU csvs (compute_ms/frame_ms/fps) and the CPU ones (avg_ms/fps) the same way.
+Saves to --out if given, otherwise opens a window.
+"""
 import csv
 import argparse
 import matplotlib.pyplot as plt
-import math
 
-def read_csv(path):
+
+def read_csv(path, ycol):
     xs, ys = [], []
-    with open(path, "r", encoding="utf-8") as f:
-        r = csv.DictReader(f)
-        for row in r:
+    with open(path, "r", newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            v = row.get(ycol)
+            if not v:
+                continue
             xs.append(int(row["N"]))
-            ys.append(float(row["fps"]))
+            ys.append(float(v))
     return xs, ys
+
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cpu", required=True, help="ModernGL CPU csv")
-    ap.add_argument("--pygame", required=True, help="Pygame CPU csv")
-    ap.add_argument("--out", default="", help="Optional png output path")
+    ap.add_argument("--csv", action="append", required=True, metavar="LABEL=PATH",
+                    help="Series to plot, repeatable (e.g. --csv gpu_grid=gpu_grid.csv)")
+    ap.add_argument("--y", default="fps", choices=["fps", "compute_ms", "frame_ms", "avg_ms"],
+                    help="Column to plot on the y axis")
+    ap.add_argument("--logx", action="store_true", help="Log-scale the x axis")
+    ap.add_argument("--logy", action="store_true", help="Log-scale the y axis")
+    ap.add_argument("--out", default="", help="Save a png here instead of opening a window")
     args = ap.parse_args()
 
-    x1, y1 = read_csv(args.cpu)
-    x2, y2 = read_csv(args.pygame)
+    plt.figure(figsize=(9, 6))
+    plotted = 0
+    for spec in args.csv:
+        label, _, path = spec.partition("=")
+        if not path:
+            raise SystemExit(f"--csv wants LABEL=PATH, got {spec!r}")
+        xs, ys = read_csv(path, args.y)
+        if not xs:
+            print(f"skipping {label}: no '{args.y}' data in {path}")
+            continue
+        plt.plot(xs, ys, marker="o", markersize=3, label=label)
+        plotted += 1
 
-    plt.figure()
-    plt.plot(x1, y1, marker="o", label="ModernGL (CPU physics + GPU render)")
-    plt.plot(x2, y2, marker="o", label="Pygame (CPU physics + CPU draw)")
+    if not plotted:
+        raise SystemExit(f"no csv had a '{args.y}' column")
+
+    if args.logx:
+        plt.xscale("log")
+    if args.logy:
+        plt.yscale("log")
     plt.xlabel("Particle count (N)")
-    plt.ylabel("Average fps (sqrt scale)")
-    plt.title("CPU vs Pygame sweep benchmark")
+    plt.ylabel(args.y)
+    plt.title(f"Particle sim: {args.y} vs N")
     plt.legend()
-    plt.grid(True)
+    plt.grid(True, which="both", alpha=0.3)
 
     if args.out:
         plt.savefig(args.out, dpi=150, bbox_inches="tight")
-    plt.show()
+        print(f"wrote {args.out}")
+    else:
+        plt.show()
+
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,11 @@
+{
+  "start_n": 20,
+  "end_n": 300000,
+  "step_n": 10,
+  "step_mul": 1.3,
+  "warmup_seconds": 1.0,
+  "sample_seconds": 1.5,
+  "abort_ms": 250.0,
+  "seed": 1,
+  "out_csv": "gpu.csv"
+}

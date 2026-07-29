@@ -12,6 +12,9 @@ import numpy as np
 import glfw
 import moderngl
 import time
+import argparse
+import csv
+import json
 
 # ------------------------------------------------
 # Configurations (You can tune these as you want 
@@ -33,6 +36,8 @@ PARTICLE_SIZE = 1.0             # size of each particle
 FORCE_FALLOFF = 2 # .6          # 0 = inverse-square, 1 = inverse-linear, 2 = no falloff, etc.
 WORLD_BOUNDS = 1.0   
 DT = 1.0 / 90.0                                             
+
+VSYNC = 1                      # 1 = demo (capped to monitor), 0 = benchmarking (uncapped)
 
 # Neighbor grid params
 GRID_RES = 256                 # grid is GRID_RES x GRID_RES    
@@ -276,7 +281,33 @@ void main() {
 }
 """
 
+# ----------------------------
+# Benchmark mode (--bench): sweep N, write csv, exit
+# ----------------------------
+ENGINE = "gpu_grid"
+
+def parse_args():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--bench", action="store_true", help="Run automated sweep benchmark and exit")
+    ap.add_argument("--config", default="bench_config_gpu.json", help="Path to benchmark config json")
+    ap.add_argument("--out", default="", help="Override out_csv from the config")
+    return ap.parse_args()
+
+def write_bench_csv(path, rows):
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=["engine", "N", "compute_ms", "frame_ms", "fps"])
+        w.writeheader()
+        w.writerows(rows)
+
+
 def main():
+    args = parse_args()
+    bench = args.bench
+    cfg = None
+    if bench:
+        with open(args.config, encoding="utf-8") as f:
+            cfg = json.load(f)
+
     if not glfw.init():
         raise RuntimeError("glfw.init() failed")
 
@@ -290,11 +321,14 @@ def main():
         raise RuntimeError("glfw.create_window() failed")
 
     glfw.make_context_current(window)
-    glfw.swap_interval(1)
+    vsync = 0 if bench else VSYNC
+    glfw.swap_interval(vsync)
 
     ctx = moderngl.create_context()
     ctx.enable(moderngl.BLEND)
     ctx.enable(moderngl.PROGRAM_POINT_SIZE)
+
+    print(f"[GPU] {ctx.info['GL_RENDERER']} | {ctx.info['GL_VERSION']} | vsync={vsync}")
 
     # ----------------------------
     # Particle init (CPU once)
@@ -312,7 +346,7 @@ def main():
     stride = particle_dtype.itemsize
 
     particles_cpu = np.zeros(CAPACITY, dtype=particle_dtype)
-    rng = np.random.default_rng(1)
+    rng = np.random.default_rng(cfg["seed"] if bench else 1)
 
     # A
     for i in range(N_PER_TYPE):
@@ -415,6 +449,19 @@ def main():
 
     space_was_down = False
 
+    # Bench sweep state (mean over each sample window, not the EMA -- the EMA
+    # lags badly once frames get slow and would flatter the tail of the curve)
+    bench_rows = []
+    bench_next_t = None
+    bench_skip = 0
+    acc_compute = acc_frame = 0.0
+    acc_frames = 0
+    if bench:
+        active_N = 0                       # the sweep owns N, ignore N_PER_TYPE
+        append_particles(int(cfg["start_n"]))
+        bench_next_t = time.perf_counter() + float(cfg["warmup_seconds"])
+        bench_skip = 10
+
     # ----------------------------
     # Main loop
     # ----------------------------
@@ -457,11 +504,52 @@ def main():
             ema_compute_ms = 0.9 * ema_compute_ms + 0.1 * compute_ms
             ema_frame_ms = 0.9 * ema_frame_ms + 0.1 * frame_ms
 
+        if bench:
+            if bench_skip > 0:
+                # discard the frames right after an N change (buffer writes, warmup)
+                bench_skip -= 1
+                acc_compute = acc_frame = 0.0
+                acc_frames = 0
+            else:
+                acc_compute += compute_ms
+                acc_frame += frame_ms
+                acc_frames += 1
+
         now = time.perf_counter()
-        if now - last_print > 1.0:
+        if bench:
+            if now >= bench_next_t and acc_frames > 0:
+                mean_compute = acc_compute / acc_frames
+                mean_frame = acc_frame / acc_frames
+                fps = 1000.0 / max(1e-6, mean_frame)
+                bench_rows.append({
+                    "engine": ENGINE, "N": active_N,
+                    "compute_ms": f"{mean_compute:.4f}",
+                    "frame_ms": f"{mean_frame:.4f}",
+                    "fps": f"{fps:.2f}",
+                })
+                print(f"[BENCH][{ENGINE}] N={active_N} compute={mean_compute:.3f} ms "
+                      f"frame={mean_frame:.3f} ms ({fps:.1f} FPS) over {acc_frames} frames")
+
+                if mean_frame > float(cfg["abort_ms"]) or active_N >= int(cfg["end_n"]):
+                    break
+                prev_n = active_N
+                # linear at small N, geometric above it, so one config covers
+                # the CPU's range (20..400) and the GPU's (..300k) in ~37 samples
+                mul = float(cfg.get("step_mul", 1.0))
+                append_particles(max(int(cfg["step_n"]), int(active_N * mul) - active_N))
+                if active_N == prev_n:
+                    break          # hit CAPACITY, nothing more to sweep
+                bench_next_t = now + float(cfg["sample_seconds"])
+                bench_skip = 10
+        elif now - last_print > 1.0:
             fps = 1000.0 / max(1e-6, ema_frame_ms)
             print(f"GPU compute: ~{ema_compute_ms:.3f} ms | frame: ~{ema_frame_ms:.3f} ms (~{fps:.1f} FPS) | N={active_N}")
             last_print = now
+
+    if bench:
+        out_path = args.out or str(cfg.get("out_csv", ENGINE + ".csv"))
+        write_bench_csv(out_path, bench_rows)
+        print(f"[BENCH] wrote {out_path} ({len(bench_rows)} rows)")
 
     glfw.terminate()
 

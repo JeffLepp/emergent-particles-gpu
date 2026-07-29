@@ -53,6 +53,7 @@ def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bench", action="store_true", help="Run automated sweep benchmark and exit")
     ap.add_argument("--config", default="bench_config.json", help="Path to benchmark config json")
+    ap.add_argument("--out", default="", help="Override out_csv from the config")
     return ap.parse_args()
 
 def bench_append_particles(particles, k, rng, particle_dtype, WORLD_BOUNDS):
@@ -367,7 +368,7 @@ def main():
         step_n  = int(cfg["step_n"])
         warm_s  = float(cfg["warmup_seconds"])
         samp_s  = float(cfg["sample_seconds"])
-        out_csv = str(cfg.get("out_csv", "cpu_moderngl.csv"))
+        out_csv = args.out or str(cfg.get("out_csv", "cpu_moderngl.csv"))
 
         # Force initial N to match start_n
         if N != start_n:
