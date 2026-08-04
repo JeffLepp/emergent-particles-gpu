@@ -1,0 +1,4 @@
+solver,N,mesh_res,compute_ms,speedup_vs_brute,relative_l2_pct,p95_error_over_ref_rms_pct,max_error_over_ref_rms_pct
+GPU brute force (float32),4096,0,0.5434,1.000,0.000120,0.000232,0.000493
+P3M 256x256,4096,256,0.9163,0.593,0.379036,0.669102,1.148409
+P3M 512x512,4096,512,3.6192,0.150,0.096718,0.169824,0.280187

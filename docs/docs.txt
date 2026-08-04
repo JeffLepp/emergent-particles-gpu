@@ -33,7 +33,22 @@ damping are intentionally simplified to encourage emergent behavior rather
 than real-world correctness.
 
 The recommended entry point is:
-- Particles_Test_GPU_Standard.py
+- Particles_Test_GPU_p3m.py
+
+Three GPU variants ship side by side:
+- Particles_Test_GPU_p3m.py       full force law via mesh FFT + direct near correction
+- Particles_Test_GPU_grid.py       uniform grid, neighbor-limited (described above)
+- Particles_Test_GPU_bruteforce.py every pair, no acceleration structure
+
+P3M uses ping-pong particle buffers and explicit barriers between dependent GPU
+passes.  Its fixed 512x512 physical mesh produced 0.0967% relative L2 force
+error against a float64 all-pairs oracle at N=4096.  It becomes faster than the
+race-free brute-force force calculation between N=20,000 and N=50,000 and was
+62.9x faster at N=200,000 on the benchmark RTX 5060.
+
+The grid only wins past roughly N = 78,000. Below that the brute force loop is
+faster: warp-uniform reads broadcast from L1, whereas the grid pays for scattered
+cell lookups and a dependent-load walk through the linked list.
 
 The premade/ directory contains alternative configurations that adjust
 interaction parameters and initial conditions to produce specific visual

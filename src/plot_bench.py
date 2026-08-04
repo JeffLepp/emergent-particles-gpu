@@ -9,7 +9,6 @@ Saves to --out if given, otherwise opens a window.
 """
 import csv
 import argparse
-import matplotlib.pyplot as plt
 
 
 def read_csv(path, ycol):
@@ -34,6 +33,12 @@ def main():
     ap.add_argument("--logy", action="store_true", help="Log-scale the y axis")
     ap.add_argument("--out", default="", help="Save a png here instead of opening a window")
     args = ap.parse_args()
+
+    # Saving a graph should not require Tk or a visible desktop session.
+    if args.out:
+        import matplotlib
+        matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
 
     plt.figure(figsize=(9, 6))
     plotted = 0
