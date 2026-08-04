@@ -18,6 +18,8 @@ import argparse
 import csv
 import json
 
+from p3m_core import BruteForceSolver, GpuIntegrator
+
 # ------------------------------------------------
 # Configurations (You can tune these as you want 
 #                   but its on a cool setting now)
@@ -252,26 +254,21 @@ def main():
 
     # SSBO: particles (binding=0) — allocate full capacity
     ssbo_particles = ctx.buffer(particles_cpu.tobytes())
+    ssbo_particles_next = ctx.buffer(reserve=particles_cpu.nbytes)
     ssbo_particles.bind_to_storage_buffer(binding=0)
 
     # ----------------------------
     # Shaders / Programs
     # ----------------------------
-    cs_physics = ctx.compute_shader(COMPUTE_SRC)
+    # The force pass reads a frozen snapshot and integration writes a separate
+    # particle buffer. This avoids the read/write race in the original kernel.
+    brute_solver = BruteForceSolver(
+        ctx, CAPACITY, SOFTENING, FORCE_FALLOFF, SAME_REPEL, OTHER_ATTRACT
+    )
+    integrator = GpuIntegrator(ctx, DT, DRAG, MAX_SPEED, WORLD_BOUNDS)
 
     prog = ctx.program(vertex_shader=VERT_SRC, fragment_shader=FRAG_SRC)
     vao = ctx.vertex_array(prog, [])  # gl_VertexID fetches from SSBO
-
-    # Uniforms: physics
-    cs_physics["uN"].value = active_N
-    cs_physics["uDT"].value = DT
-    cs_physics["uSoft"].value = SOFTENING
-    cs_physics["uDrag"].value = DRAG
-    cs_physics["uMaxSpeed"].value = MAX_SPEED
-    cs_physics["uSameRepel"].value = SAME_REPEL
-    cs_physics["uOtherAttract"].value = OTHER_ATTRACT
-    cs_physics["uForceFalloff"].value = FORCE_FALLOFF
-    cs_physics["uBounds"].value = WORLD_BOUNDS
 
     # Render uniforms
     prog["uPointSize"].value = PARTICLE_SIZE
@@ -301,7 +298,6 @@ def main():
         ssbo_particles.write(new.tobytes(), offset=start * stride)
 
         active_N = end
-        cs_physics["uN"].value = active_N
 
     # ----------------------------
     # Timing + Input
@@ -344,13 +340,13 @@ def main():
         fb_w, fb_h = glfw.get_framebuffer_size(window)
         ctx.viewport = (0, 0, fb_w, fb_h)
 
-        groups_particles = (active_N + 256 - 1) // 256
-
         with query:
-            cs_physics.run(group_x=groups_particles)
+            brute_solver.compute(ssbo_particles, active_N)
+            integrator.step(ssbo_particles, brute_solver.acceleration,
+                            ssbo_particles_next, active_N)
+        ssbo_particles, ssbo_particles_next = ssbo_particles_next, ssbo_particles
 
-        ctx.memory_barrier()
-
+        ssbo_particles.bind_to_storage_buffer(binding=0)
         ctx.clear(0.03, 0.03, 0.04, 1.0)
         vao.render(mode=moderngl.POINTS, vertices=active_N)
         glfw.swap_buffers(window)

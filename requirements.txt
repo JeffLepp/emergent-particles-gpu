@@ -1,3 +1,5 @@
 moderngl>=5.9.0
 glfw>=2.6.0
 numpy>=1.24
+pygame>=2.5          # Particles_in_pygame.py
+matplotlib>=3.7      # plot_bench.py
