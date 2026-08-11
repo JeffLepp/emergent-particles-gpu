@@ -260,7 +260,7 @@ def soft_circle_surface(radius, color):
             if r2 > radius*radius:
                 continue
             r = math.sqrt(r2) / max(1e-6, radius)
-            # similar “soft edge” feel
+            # similar "soft edge" feel
             a = int(255 * (1.0 - min(1.0, max(0.0, (r - 0.7) / 0.3))))
             s.set_at((px, py), (color[0], color[1], color[2], a))
 
@@ -470,7 +470,7 @@ def main():
         screen.fill(BG)
 
         if ALPHA_SOFT_EDGE:
-            # blit precomputed “soft sprites”
+            # blit precomputed "soft sprites"
             ra = sprite_a.get_width() // 2
             rb = sprite_b.get_width() // 2
             for i in range(x.shape[0]):

@@ -32,6 +32,8 @@ def main():
     ap.add_argument("--logx", action="store_true", help="Log-scale the x axis")
     ap.add_argument("--logy", action="store_true", help="Log-scale the y axis")
     ap.add_argument("--out", default="", help="Save a png here instead of opening a window")
+    ap.add_argument("--budget", action="store_true",
+                    help="Draw 60/30 FPS frame-budget lines (ms y-axes only)")
     args = ap.parse_args()
 
     # Saving a graph should not require Tk or a visible desktop session.
@@ -55,6 +57,12 @@ def main():
 
     if not plotted:
         raise SystemExit(f"no csv had a '{args.y}' column")
+
+    if args.budget and args.y.endswith("_ms"):
+        for ms, name in ((1000 / 60, "60 FPS budget"), (1000 / 30, "30 FPS budget")):
+            plt.axhline(ms, color="gray", linestyle="--", linewidth=1, alpha=0.7)
+            plt.annotate(name, (0.01, ms), xycoords=("axes fraction", "data"),
+                         va="bottom", fontsize=8, color="gray")
 
     if args.logx:
         plt.xscale("log")

@@ -214,7 +214,7 @@ def main():
         particles_cpu["vel"][i]  = rng.uniform(-0.1, 0.1, 2).astype(np.float32)
         particles_cpu["type"][i] = 1
 
-    # SSBO: particles (binding=0) — allocate full capacity
+    # SSBO: particles (binding=0) - allocate full capacity
     ssbo_particles = ctx.buffer(particles_cpu.tobytes())
     ssbo_particles.bind_to_storage_buffer(binding=0)
 

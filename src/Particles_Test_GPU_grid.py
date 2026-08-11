@@ -360,7 +360,7 @@ def main():
         particles_cpu["vel"][i]  = rng.uniform(-0.1, 0.1, 2).astype(np.float32)
         particles_cpu["type"][i] = 1
 
-    # SSBO: particles (binding=0) — allocate full capacity
+    # SSBO: particles (binding=0) - allocate full capacity
     ssbo_particles = ctx.buffer(particles_cpu.tobytes())
     ssbo_particles.bind_to_storage_buffer(binding=0)
 
@@ -370,7 +370,7 @@ def main():
     ssbo_head = ctx.buffer(grid_head.tobytes())
     ssbo_head.bind_to_storage_buffer(binding=1)
 
-    # SSBO: next pointers (binding=2) — allocate full capacity
+    # SSBO: next pointers (binding=2) - allocate full capacity
     next_idx_cpu = np.full(CAPACITY, -1, dtype=np.int32)
     ssbo_next = ctx.buffer(next_idx_cpu.tobytes())
     ssbo_next.bind_to_storage_buffer(binding=2)
