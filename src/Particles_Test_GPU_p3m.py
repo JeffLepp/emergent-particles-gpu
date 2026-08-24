@@ -115,17 +115,24 @@ def main():
           f"P3M mesh={args.mesh_res}x{args.mesh_res}")
 
     n0 = 2 * N_PER_TYPE
-    capacity = n0 + EXTRA_CAPACITY
+    # A sweep must be able to reach end_n, so size the buffers from the config.
+    capacity = int(cfg["end_n"]) + 1 if bench else n0 + EXTRA_CAPACITY
     active_n = n0
     rng = np.random.default_rng(cfg["seed"] if bench else 1)
-    particles_cpu = np.zeros(capacity, dtype=PARTICLE_DTYPE)
-    particles_cpu["pos"][:n0] = rng.uniform(-0.3, 0.3, (n0, 2)).astype(np.float32)
-    particles_cpu["vel"][:n0] = rng.uniform(-0.1, 0.1, (n0, 2)).astype(np.float32)
-    particles_cpu["type"][:N_PER_TYPE] = 0
-    particles_cpu["type"][N_PER_TYPE:n0] = 1
+    seed_cpu = np.zeros(n0, dtype=PARTICLE_DTYPE)
+    seed_cpu["pos"] = rng.uniform(-0.3, 0.3, (n0, 2)).astype(np.float32)
+    seed_cpu["vel"] = rng.uniform(-0.1, 0.1, (n0, 2)).astype(np.float32)
+    seed_cpu["type"][:N_PER_TYPE] = 0
+    seed_cpu["type"][N_PER_TYPE:] = 1
 
-    particles_current = ctx.buffer(particles_cpu.tobytes())
-    particles_next = ctx.buffer(reserve=particles_cpu.nbytes)
+    # Reserve then partial-write, so a 20M sweep does not build a
+    # multi-hundred-MB throwaway CPU copy just to seed 4000 particles.
+    buffer_bytes = capacity * PARTICLE_DTYPE.itemsize
+    print(f"[GPU] capacity={capacity:,} particles "
+          f"({2 * buffer_bytes / 2**20:.0f} MB of ping-pong buffers)")
+    particles_current = ctx.buffer(reserve=buffer_bytes)
+    particles_current.write(seed_cpu.tobytes())
+    particles_next = ctx.buffer(reserve=buffer_bytes)
     solver = P3MForceSolver(
         ctx, capacity, args.mesh_res, WORLD_BOUNDS, SOFTENING,
         FORCE_FALLOFF, SAME_REPEL, OTHER_ATTRACT,
@@ -149,6 +156,7 @@ def main():
         active_n += count
 
     bench_rows = []
+    bench_out = args.out or str(cfg.get("out_csv", "gpu_p3m.csv"))
     bench_next_t = None
     bench_skip = 0
     acc_compute = acc_frame = 0.0
@@ -217,6 +225,9 @@ def main():
             })
             print(f"[BENCH][P3M] N={active_n} compute={mean_compute:.3f} ms "
                   f"frame={mean_frame:.3f} ms ({fps:.1f} FPS) over {acc_frames} frames")
+            # Rewrite after every point: at high N a frame can exceed the
+            # Windows TDR watchdog and the driver kills us mid-sweep.
+            write_bench_csv(bench_out, bench_rows)
             if mean_frame > float(cfg["abort_ms"]) or active_n >= int(cfg["end_n"]):
                 break
             previous = active_n
@@ -233,9 +244,8 @@ def main():
             last_print = now
 
     if bench:
-        output = args.out or str(cfg.get("out_csv", "gpu_p3m.csv"))
-        write_bench_csv(output, bench_rows)
-        print(f"[BENCH] wrote {output} ({len(bench_rows)} rows)")
+        write_bench_csv(bench_out, bench_rows)
+        print(f"[BENCH] wrote {bench_out} ({len(bench_rows)} rows)")
     glfw.destroy_window(window)
     glfw.terminate()
 

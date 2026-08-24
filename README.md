@@ -6,19 +6,20 @@ Real-time GPU particle simulation built with **ModernGL + GLFW** where all physi
 
 ## Benchmarking
 
-Every engine takes `--bench` and sweeps N until a frame crosses `abort_ms`, so
-the fast and slow engines share one config:
+Every engine takes `--bench` and sweeps N until a frame crosses `abort_ms`. The
+slower engines share one config; P3M gets its own because it runs far enough that
+`bench_config_gpu.json` would cut it short:
 
 ```bash
 cd src
-python Particles_Test_GPU_p3m.py       --bench --config bench_config_gpu.json --out gpu_p3m.csv --mesh-res 512
+python Particles_Test_GPU_p3m.py       --bench --config bench_config_p3m_sweep.json --out gpu_p3m_sweep.csv --mesh-res 512
 python Particles_Test_GPU_bruteforce.py --bench --config bench_config_gpu.json --out gpu_bruteforce.csv
 python Particles_Test_GPU_grid.py       --bench --config bench_config_gpu.json --out gpu_grid.csv
 python Particles_Test_CPU.py            --bench --config bench_config.json     --out cpu_moderngl.csv
 python Particles_in_pygame.py           --bench --config bench_config.json     --out cpu_pygame.csv
 
 python plot_bench.py --y fps --logx --logy --out ../assets/bench_gpu_vs_cpu.png \
-  --csv "GPU P3M (512 mesh)=gpu_p3m.csv" \
+  --csv "GPU P3M (512 mesh)=gpu_p3m_sweep.csv" \
   --csv "GPU brute force O(N^2)=gpu_bruteforce.csv" \
   --csv "GPU uniform grid (capped)=gpu_grid.csv" \
   --csv "CPU physics + GPU render (ModernGL)=cpu_moderngl.csv" \
@@ -37,7 +38,7 @@ Run on an RTX 5060, driver 591.59, GL 4.3, 900x700 window. Both axes are log.
 
 | Engine | fps at N=400 | N at 60 fps | Largest N measured |
 |---|---|---|---|
-| GPU, P3M 512 mesh | ~233 | >377,000 | 377,059 @ 196 fps |
+| GPU, P3M 512 mesh | ~247 | ~1,400,000 | 14,846,156 @ 0.65 fps |
 | GPU, brute force O(N²) | 3621 | ~44,000 | 223,113 @ 3.4 fps |
 | GPU, uniform grid (capped) | 1380 | ~42,100 | 377,059 @ 9.9 fps |
 | CPU physics + GPU render | 11.7 | ~157 | 400 @ 11.7 fps |
@@ -50,26 +51,13 @@ particles are added.
 
 At N=400, which is about all the CPU version can handle, brute force on the GPU
 runs 309x faster. At the other end, P3M holds 377,000 particles at 196 fps while
-the capped grid manages 10 fps.
+the capped grid manages 10 fps. P3M stays above 60 fps to about 1.4 million
+particles and was swept to 14.8 million at 0.65 fps, where a frame takes 1.5 s;
+the sweep stops there to stay under the 2 s Windows driver watchdog, not because
+the GPU ran out of memory (it peaked near 2 GB of 8 GB).
 
 The brute force kernel does roughly 170 billion pair interactions per second. At
 N=223,113 that is 5x10^10 pairs in 267 ms.
-
-Two things here I did not expect going in.
-
-The grid does not beat brute force until about 78,000 particles. Below that the
-naive all pairs loop is faster, because every thread in a warp reads the same
-particle j and the L1 broadcasts it for free. The grid pays for scattered cell
-lookups and a linked list walk where every load waits on the one before it.
-`GRID_RES` is 256 while `NEIGHBOR_RADIUS` is 0.18, so each particle scans
-49x49 = 2401 cells and nearly all of them are empty. Sizing cells to the radius
-is the fix.
-
-Past about 46,000 the grid curve flattens partly because it stops doing all the
-work. `MAX_NEIGHBORS` is 2056 and it starts cutting the neighbor list short. You
-can see it as a dip in the data: N=78,119 finishes in 26.1 ms while N=60,092
-takes 28.3 ms, so 30% more particles ran faster. Brute force computes every pair
-the whole way, so its curve is honest N².
 
 ## P3M: Speed vs Accuracy
 
@@ -112,8 +100,8 @@ Particle-by-particle trajectories eventually separate because this system is
 chaotic. Starting both solvers from the same 2,048 particles, the 512² mesh had
 0.11% of world-width position RMSE after 30 steps, 1.97% after 100, and 4.34%
 after 300. A coarse 32×32 occupancy comparison was 1.12%, 25.1%, and 31.4% at
-those checkpoints. This separates “the exact same particle trajectory” from
-“the same large-scale visual distribution.” Raw results are in
+those checkpoints. This separates "the exact same particle trajectory" from
+"the same large-scale visual distribution." Raw results are in
 `p3m_accuracy.csv`, `p3m_speed.csv`, and `p3m_drift.csv`.
 
 ¹ Error magnitude divided by the reference RMS force magnitude.
